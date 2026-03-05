@@ -24,11 +24,7 @@ local function registerNewRemoteEvent(name: string): RemoteEvent
 end
 
 local function getRemoteEvent(name: string): RemoteEvent
-	local remoteEvent = bridgeData[name].remoteEvent
-	
-	if not remoteEvent then
-		return registerNewRemoteEvent(name)
-	end
+	local remoteEvent = bridgeData[name].remoteEvent :: RemoteEvent
 	
 	return remoteEvent
 end
@@ -40,20 +36,12 @@ end
 local Bridge = {}
 
 function Bridge.SendToIndividual(bridge: Bridge, individual: Player, ...)
-	if not bridgeData[bridge.bridgeName] then
-		bridgeData[bridge.bridgeName] = {}
-	end
-	
 	local remoteEvent = getRemoteEvent(bridge.bridgeName)
 
 	remoteEvent:FireClient(individual, ...)
 end
 
 function Bridge.SendToGroup(bridge: Bridge, group: {Player}, ...)
-	if not bridgeData[bridge.bridgeName] then
-		bridgeData[bridge.bridgeName] = {}
-	end
-	
 	local remoteEvent = getRemoteEvent(bridge.bridgeName)
 
 	for _, individual in group do
@@ -62,20 +50,12 @@ function Bridge.SendToGroup(bridge: Bridge, group: {Player}, ...)
 end
 
 function Bridge.Send(bridge: Bridge, ...)
-	if not bridgeData[bridge.bridgeName] then
-		bridgeData[bridge.bridgeName] = {}
-	end
-	
 	local remoteEvent = getRemoteEvent(bridge.bridgeName)
 	
 	remoteEvent:FireAllClients(...)
 end
 
 function Bridge.Connect(bridge: Bridge, callback: (player: Player, ...any) -> ()): RBXScriptConnection
-	if not bridgeData[bridge.bridgeName] then
-		bridgeData[bridge.bridgeName] = {}
-	end
-	
 	local remoteEvent = getRemoteEvent(bridge.bridgeName)
 	local connection = remoteEvent.OnServerEvent:Connect(callback)
 	local bridgeConnections = bridgeData[bridge.bridgeName].connections
@@ -126,6 +106,9 @@ function ElectronBridge.New(bridgeName: string): Bridge
 		}, 
 		ElectronBridge
 	)
+	
+	bridgeData[bridgeName] = {}
+	registerNewRemoteEvent(bridgeName)
 
 	return bridge
 end
