@@ -12,7 +12,7 @@ local REMOTE_WFC_TIMEOUT = 5 --// how long will it wait for the remote event bef
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
-local bridgeData: {[string]: {connections: {RBXScriptConnection}?, remoteEvent: RemoteEvent?}} = {}
+local bridgeData: {[string]: {connections: {RBXScriptConnection}?, remoteEvent: RemoteEvent? | RemoteFunction?}} = {}
 
 local ElectronBridge = {}
 
@@ -25,7 +25,7 @@ local function getRemoteEvent(name: string): RemoteEvent
 		if not remoteEvent then
 			error("Missing remote event: " .. name)
 		elseif not remoteEvent:IsA("RemoteEvent") then
-			error(`Found and instance under the name: ElectronBridge_{name} that isnt a remote event!`)
+			error(`Found an instance under the name: ElectronBridge_{name} that isnt a remote event!`)
 		end
 	end
 	
@@ -34,19 +34,55 @@ local function getRemoteEvent(name: string): RemoteEvent
 	return remoteEvent :: RemoteEvent
 end
 
-local function validateNewBridgeName(name: string): boolean
-	return not bridgeData[name]
+local function getRemoteFunction(name: string): RemoteFunction
+	local remoteEvent = bridgeData[name].remoteEvent
+
+	if not remoteEvent then
+		remoteEvent = ReplicatedStorage:WaitForChild("ElectronBridge_" .. name .. "FUNCTION", REMOTE_WFC_TIMEOUT)
+
+		if not remoteEvent then
+			error("Missing remote event: " .. name)
+		elseif not remoteEvent:IsA("RemoteFunction") then
+			error(`Found an instance under the name: ElectronBridge_{name}FUNCTION that isnt a remote function!`)
+		end
+	end
+
+	bridgeData[name].remoteEvent = remoteEvent :: RemoteFunction
+
+	return remoteEvent :: RemoteFunction
+end
+
+local function validateNewBridgeName(name: string, isRemoteFunction: boolean): boolean
+	if not bridgeData[name] then
+		return true
+	end
+	
+	if bridgeData[name].remoteEvent == nil then return false end
+	
+	local remote = bridgeData[name].remoteEvent :: RemoteEvent | RemoteFunction
+	if isRemoteFunction and remote:IsA("RemoteFunction") then
+		return true
+	elseif not isRemoteFunction and remote:IsA("RemoteEvent") then
+		return true
+	end
+	
+	return false
 end
 
 local Bridge = {}
 
-function Bridge.Send(bridge: Bridge, ...)
+function Bridge.Send(bridge: Bridge, ...): ()
 	if not bridgeData[bridge.bridgeName] then
 		bridgeData[bridge.bridgeName] = {}
 	end
 	
-	local remoteEvent = getRemoteEvent(bridge.bridgeName)
-	remoteEvent:FireServer(...)
+	if not bridge.isFunction then
+		local remoteEvent = getRemoteEvent(bridge.bridgeName)
+		remoteEvent:FireServer(...)
+	else
+		local remoteEvent = getRemoteFunction(bridge.bridgeName)
+		return remoteEvent:InvokeServer(...)
+	end
 end
 
 function Bridge.Connect(bridge: Bridge, callback: (...any) -> ()): RBXScriptConnection
@@ -93,13 +129,14 @@ end
 ElectronBridge.__index = Bridge
 
 function ElectronBridge.New(bridgeName: string): Bridge
-	if SAFETY_ENABLED and not validateNewBridgeName(bridgeName) then
+	if SAFETY_ENABLED and not validateNewBridgeName(bridgeName, false) then
 		error("Bridge name is already registered!")
 	end
 	
 	local bridge = setmetatable(
 		{
-			bridgeName = bridgeName
+			bridgeName = bridgeName,
+			isFunction = false
 		}, 
 		ElectronBridge
 	)
@@ -107,9 +144,26 @@ function ElectronBridge.New(bridgeName: string): Bridge
 	return bridge
 end
 
+function ElectronBridge.NewFunction(bridgeName: string): Bridge
+	if SAFETY_ENABLED and not validateNewBridgeName(bridgeName, true) then
+		error("Bridge name is already registered!")
+	end
+
+	local bridge = setmetatable(
+		{
+			bridgeName = bridgeName,
+			isFunction = true
+		}, 
+		ElectronBridge
+	)
+
+	return bridge
+end
+
 export type Bridge = typeof(setmetatable(
 	{} :: {
-		bridgeName: string	
+		bridgeName: string,
+		isFunction: boolean
 	},
 	ElectronBridge
 ))
